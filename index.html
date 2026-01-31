@@ -1,25 +1,103 @@
-<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
-  <head>
-    <title>model-viewer</title>
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-  </head>
-  <body>
-    <style>
-      model-viewer {
-      width: 100%;
-      height: 100vh;
-      background-color: #faebd7;} /* 16進数で背景の色を指定 */
-    </style>
-      <model-viewer 
-      camera-controls camera-orbit="120deg 50deg 10m" 
-      src="2risako3.gltf" /* 3Dファイルを指定 */
-      poster="assets/loding.gif"
-      alt="non"
-      shadow-intensity="1"
-      auto-rotate>
-    </model-viewer>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WRO Randomizers</title>
+  <style>
+    :root{ --font: system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif; }
+    body{ margin:0; font-family:var(--font); background:#fafafa; color:#111; }
+    header{ padding:18px 16px; background:#fff; border-bottom:1px solid #e5e5e5; }
+    header h1{ margin:0; font-size:18px; }
+    header p{ margin:6px 0 0; color:#444; font-size:13px; }
+    .wrap{ max-width:980px; margin:0 auto; padding:16px; }
+    .tabs{
+      display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 16px;
+    }
+    .tab{
+      padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:10px;
+      font-weight:700; cursor:pointer; user-select:none;
+    }
+    .tab[aria-selected="true"]{ border-color:#111; }
+    .grid{
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;
+    }
+    .card{
+      background:#fff; border:1px solid #ddd; border-radius:14px; padding:14px;
+      box-shadow:0 2px 10px rgba(0,0,0,.05);
+    }
+    .card h2{ margin:0 0 6px; font-size:16px; }
+    .card p{ margin:0 0 10px; font-size:13px; color:#444; line-height:1.5; }
+    .btn{
+      display:inline-block; padding:10px 12px; border-radius:12px; border:1px solid #ccc;
+      background:#fff; text-decoration:none; color:#111; font-weight:800;
+    }
+    .btn:hover{ background:#f2f2f2; }
+    footer{ padding:16px; color:#666; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>WRO Randomizers</h1>
+      <p>Competition Category / 競技カテゴリ</p>
+      <div class="tabs" role="tablist" aria-label="category tabs">
+        <div class="tab" role="tab" aria-selected="true" data-cat="senior">Senior / 高校</div>
+        <div class="tab" role="tab" aria-selected="false" data-cat="junior">Junior / 中学</div>
+        <div class="tab" role="tab" aria-selected="false" data-cat="elem">Elementary / 小学</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <footer class="wrap">
+    <div>Made for local practice / events. Static site (GitHub Pages / NAS ok).</div>
+  </footer>
+
+<script>
+  const items = {
+    senior: [
+      {
+        title: "RoboMission 2026 Senior — Mosaic Paper Randomizer",
+        desc: "34mm squares, 16mm gaps, overall 183×134mm. 4 colors × 6 each.",
+        href: "./mosaic-2026-senior.html"
+      },
+    ],
+    junior: [
+      { title:"(placeholder) RoboMission 2026 Junior", desc:"Add your tool later.", href:"#"}
+    ],
+    elem: [
+      { title:"(placeholder) RoboMission 2026 Elementary", desc:"Add your tool later.", href:"#"}
+    ],
+  };
+
+  function render(cat){
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+    for(const it of items[cat]){
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <h2>${it.title}</h2>
+        <p>${it.desc}</p>
+        <a class="btn" href="${it.href}">Open / 開く</a>
+      `;
+      grid.appendChild(div);
+    }
+  }
+
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected","false"));
+      t.setAttribute("aria-selected","true");
+      render(t.dataset.cat);
+    });
+  });
+
+  render("senior");
+</script>
+</body>
 </html>
