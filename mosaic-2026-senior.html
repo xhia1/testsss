@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WRO 2026 Senior - Mosaic Paper Randomizer</title>
+  <title>WRO 2026 Senior - Mosaic Paper Randomizer (3x4)</title>
   <style>
     :root{
       --font: system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
 
-      /* 固定グリッド寸法（あなた指定） */
+      /* グリッドの実寸 */
       --cell: 34mm;
       --gap: 16mm;
     }
@@ -33,7 +33,7 @@
     .paper{
       background:#fff;
       box-sizing:border-box;
-      border: 2px solid #000; /* “黒枠込み”運用のため */
+      border: 2px solid #000; /* 黒枠込み運用 */
       position: relative;
       margin-top: 14px;
       overflow: hidden;
@@ -46,16 +46,17 @@
       background:#fff; padding:2px 6px; border:1px solid #000; border-radius:8px;
     }
 
-    /* 6×4 を中央に配置 */
+    /* 4×3（横4 / 縦3）を中央に配置 */
     .grid{
       position:absolute;
       left: 50%; top: 50%;
       transform: translate(-50%,-50%);
       display:grid;
-      grid-template-columns: repeat(6, var(--cell));
-      grid-template-rows: repeat(4, var(--cell));
+      grid-template-columns: repeat(4, var(--cell));
+      grid-template-rows: repeat(3, var(--cell));
       column-gap: var(--gap);
       row-gap: var(--gap);
+      transform-origin: center;
     }
     .cell{
       width: var(--cell);
@@ -82,11 +83,12 @@
 <body>
 <header>
   <div class="wrap">
-    <h1>RoboMission 2026 Senior — Mosaic Paper Randomizer</h1>
+    <h1>RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)</h1>
     <div class="bar">
       <select id="size" aria-label="paper size">
-        <option value="190x150">190×150mm (DE / black border included)</option>
-        <option value="183x134">183×134mm (custom)</option>
+        <option value="190x150">190×150mm (DE)</option>
+        <option value="184x134" selected>184×134mm (true 34/16 scale)</option>
+        <option value="183x134">183×134mm (alt / 1mm diff)</option>
       </select>
 
       <input id="seed" type="text" placeholder="Seed (例: R1)" aria-label="seed" />
@@ -109,8 +111,8 @@
   </div>
 
   <div class="note">
-    ・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）を確認してください。<br>
-    ・24マスは 4色×各6個で均等。Seedを入れると同じ配置を再現できます。URL共有もできます。<br>
+    ・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）と 16mm（間隔）を確認。<br>
+    ・12マスは 4色×各3個で均等。Seedを入れると同じ配置を再現できます（URL共有可）。<br>
     ・紙でモザイク配置をランダム化する運用は公式ルールの想定です。:contentReference[oaicite:1]{index=1}
   </div>
 </div>
@@ -158,8 +160,9 @@
     return arr;
   }
 
+  // 12マス = 4色×各3個
   function generate(seedStr){
-    const each = 6; // 24/4
+    const each = 3;
     const bag = [];
     for(const c of COLORS){
       for(let i=0;i<each;i++) bag.push(c);
@@ -192,7 +195,19 @@
     return { wmm, hmm };
   }
 
-  // URL sync: ?seed=R1&size=190x150
+  // 用紙に収まるようスケール（190×150でも必ず全表示）
+  function fitGridToPaper(wmm, hmm){
+    // 4×3 の本来サイズ（34/16）
+    const gridW = 4*34 + 3*16; // 184
+    const gridH = 3*34 + 2*16; // 134
+
+    const s = Math.min(wmm / gridW, hmm / gridH, 1);
+
+    const grid = document.getElementById("grid");
+    grid.style.transform = `translate(-50%,-50%) scale(${s})`;
+  }
+
+  // URL sync: ?seed=R1&size=184x134
   function syncToUrl(){
     const seed = document.getElementById("seed").value.trim();
     const size = document.getElementById("size").value;
@@ -207,7 +222,8 @@
     const url = new URL(location.href);
     const size = url.searchParams.get("size");
     const seed = url.searchParams.get("seed");
-    if(size === "190x150" || size === "183x134"){
+
+    if(size === "190x150" || size === "184x134" || size === "183x134"){
       document.getElementById("size").value = size;
     }
     if(seed){
@@ -222,17 +238,20 @@
   function doGen(){
     const seed = document.getElementById("seed").value.trim();
     const { wmm, hmm } = applyPaperSize();
+    fitGridToPaper(wmm, hmm);
     render(generate(seed));
     syncToUrl();
-    setStatus(`size: ${wmm}×${hmm}mm / seed: ${seed || "random"}`);
+    setStatus(`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4`);
   }
 
-  // Download PNG: SVG foreignObject方式（外部ライブラリなし）
+  // Download PNG: SVG foreignObject方式（外部ライブラリ不要）
   async function savePng(){
     const { wmm, hmm } = applyPaperSize();
+    fitGridToPaper(wmm, hmm);
+
     const paper = document.getElementById("paper");
 
-    // 96dpi換算（一般的なCSS px基準）
+    // 96dpi換算
     const pxW = Math.round(wmm * 96 / 25.4);
     const pxH = Math.round(hmm * 96 / 25.4);
 
@@ -260,7 +279,7 @@
       const a = document.createElement("a");
       const seed = (document.getElementById("seed").value.trim() || "random").replace(/[^\w\-]+/g,"_");
       const size = document.getElementById("size").value;
-      a.download = `mosaic_2026_senior_${seed}_${size}mm.png`;
+      a.download = `mosaic_2026_senior_${seed}_${size}mm_3x4.png`;
       a.href = cv.toDataURL("image/png");
       a.click();
     };
