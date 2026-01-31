@@ -4,22 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>WRO 2026 Senior - Mosaic Paper Randomizer (3x4)</title>
+
+  <!-- PDF生成用（推奨DL） -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
   <style>
     :root{
       --font: system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
 
-      /* グリッドの実寸 */
+      /* グリッド実寸（mm） */
       --cell: 34mm;
       --gap: 16mm;
     }
     body{ margin:0; font-family:var(--font); background:#fafafa; color:#111; }
     header{ background:#fff; border-bottom:1px solid #e5e5e5; }
-    .wrap{ max-width:1100px; margin:0 auto; padding:16px; }
+    .wrap{ max-width:1160px; margin:0 auto; padding:16px; }
     header .wrap{ display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; }
 
     h1{ margin:0; font-size:16px; }
 
-    .btn, select, input{
+    .btn, select, input, label.switch{
       padding:10px 12px; border-radius:12px; border:1px solid #ccc;
       background:#fff; font-weight:900;
     }
@@ -28,18 +32,28 @@
     input{ font-weight:800; }
 
     .bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .tiny{ font-size:12px; color:#444; font-weight:700; }
+    .spacer{ width: 8px; }
 
-    /* 印刷対象：サイズはJSでstyle.width/heightをセット */
+    label.switch{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      cursor:pointer;
+      user-select:none;
+    }
+    label.switch input{ width:auto; padding:0; border:none; }
+
+    /* 印刷対象 */
     .paper{
       background:#fff;
       box-sizing:border-box;
-      border: 2px solid #000; /* 黒枠込み運用 */
+      border: 2px solid #000; /* 黒枠 */
       position: relative;
       margin-top: 14px;
       overflow: hidden;
     }
 
-    /* 上向きマーク */
     .arrow{
       position:absolute; top:6mm; left:6mm;
       font-weight:900; font-size:12px;
@@ -65,11 +79,42 @@
       box-sizing:border-box;
     }
 
+    /* 10cmスケールバー（画面表示用） */
+    .scaleWrap{
+      position:absolute;
+      left: 6mm;
+      bottom: 6mm;
+      background:#fff;
+      border: 1px solid #000;
+      border-radius: 10px;
+      padding: 3mm 4mm;
+      display:none; /* toggleで表示 */
+      gap: 3mm;
+      align-items:center;
+    }
+    .scaleWrap.on{ display:flex; }
+
+    .scaleBar{
+      width: 100mm;  /* 10cm */
+      height: 4mm;
+      border: 1px solid #000;
+      background:
+        repeating-linear-gradient(
+          to right,
+          #000 0,
+          #000 10mm,
+          #fff 10mm,
+          #fff 20mm
+        );
+    }
+    .scaleText{
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
     .note{
       margin-top:10px; font-size:12px; color:#333; line-height:1.6;
-    }
-    .tiny{
-      font-size:12px; color:#444; font-weight:700;
     }
 
     @media print{
@@ -83,8 +128,13 @@
 <body>
 <header>
   <div class="wrap">
-    <h1>RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)</h1>
+    <h1 id="title">RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)</h1>
     <div class="bar">
+      <select id="lang" aria-label="language">
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+      </select>
+
       <select id="size" aria-label="paper size">
         <option value="190x150">190×150mm (DE)</option>
         <option value="184x134" selected>184×134mm (true 34/16 scale)</option>
@@ -94,10 +144,19 @@
       <input id="seed" type="text" placeholder="Seed (例: R1)" aria-label="seed" />
 
       <button class="btn" id="gen">neue Anordnung</button>
-      <button class="btn" id="cap">Download PNG</button>
+
+      <button class="btn" id="dl-svg">Download SVG（推奨）</button>
+      <button class="btn" id="dl-png">Download PNG（beta）</button>
+      <button class="btn" id="dl-pdf">Download PDF（推奨）</button>
+
       <button class="btn" id="print">Print</button>
       <button class="btn" id="copylink">Copy Link</button>
       <button class="btn" onclick="location.href='./index.html'">Back</button>
+
+      <label class="switch" title="Include 10cm scale bar (SVG/PDF)">
+        <input id="scale" type="checkbox" />
+        <span id="scaleLabel">10cmスケール</span>
+      </label>
 
       <span class="tiny" id="status"></span>
     </div>
@@ -108,16 +167,80 @@
   <div id="paper" class="paper" aria-label="print paper">
     <div class="arrow">↑ TOP</div>
     <div id="grid" class="grid"></div>
+
+    <div id="scaleWrap" class="scaleWrap" aria-label="scale bar">
+      <div class="scaleBar" aria-hidden="true"></div>
+      <div class="scaleText" id="scaleText">10 cm</div>
+    </div>
   </div>
 
-  <div class="note">
+  <div class="note" id="note">
     ・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）と 16mm（間隔）を確認。<br>
     ・12マスは 4色×各3個で均等。Seedを入れると同じ配置を再現できます（URL共有可）。<br>
-    ・紙でモザイク配置をランダム化する運用は公式ルールの想定です。:contentReference[oaicite:1]{index=1}
+    ・Download PNG は環境差があるため beta です。印刷は SVG / PDF 推奨。
   </div>
 </div>
 
 <script>
+  // ---------- i18n ----------
+  const I18N = {
+    ja: {
+      title: "RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)",
+      seedPh: "Seed (例: R1)",
+      gen: "neue Anordnung",
+      svg: "Download SVG（推奨）",
+      png: "Download PNG（beta）",
+      pdf: "Download PDF（推奨）",
+      print: "Print",
+      copy: "Copy Link",
+      back: "Back",
+      scaleLabel: "10cmスケール",
+      scaleText: "10 cm",
+      note: [
+        "・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）と 16mm（間隔）を確認。",
+        "・12マスは 4色×各3個で均等。Seedを入れると同じ配置を再現できます（URL共有可）。",
+        "・Download PNG は環境差があるため beta です。印刷は SVG / PDF 推奨。"
+      ],
+      status: (wmm,hmm,seed,scaleOn)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"}`
+    },
+    en: {
+      title: "RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)",
+      seedPh: "Seed (e.g., R1)",
+      gen: "New arrangement",
+      svg: "Download SVG (Recommended)",
+      png: "Download PNG (beta)",
+      pdf: "Download PDF (Recommended)",
+      print: "Print",
+      copy: "Copy Link",
+      back: "Back",
+      scaleLabel: "10cm scale",
+      scaleText: "10 cm",
+      note: [
+        "• Print at 100% (no scaling). Check 34mm (cell) and 16mm (gap) with a ruler first.",
+        "• 12 cells are balanced: 4 colors × 3 each. Seed reproduces the same pattern (shareable URL).",
+        "• PNG download is beta (environment-dependent). For printing, SVG/PDF is recommended."
+      ],
+      status: (wmm,hmm,seed,scaleOn)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"}`
+    }
+  };
+
+  function applyLang(lang){
+    const t = I18N[lang] || I18N.ja;
+    document.documentElement.lang = lang;
+    document.getElementById("title").textContent = t.title;
+    document.getElementById("seed").placeholder = t.seedPh;
+    document.getElementById("gen").textContent = t.gen;
+    document.getElementById("dl-svg").textContent = t.svg;
+    document.getElementById("dl-png").textContent = t.png;
+    document.getElementById("dl-pdf").textContent = t.pdf;
+    document.getElementById("print").textContent = t.print;
+    document.getElementById("copylink").textContent = t.copy;
+    document.getElementById("scaleLabel").textContent = t.scaleLabel;
+    document.getElementById("scaleText").textContent = t.scaleText;
+    document.getElementById("note").innerHTML = t.note.join("<br>");
+  }
+
+  // ---------- pattern ----------
   const COLORS = [
     { key:"Y", hex:"#ffd400" }, // yellow
     { key:"B", hex:"#2f6bff" }, // blue
@@ -125,7 +248,7 @@
     { key:"W", hex:"#ffffff" }, // white
   ];
 
-  // --- seeded RNG ---
+  // seeded RNG
   function xfnv1a(str){
     let h = 2166136261 >>> 0;
     for (let i=0;i<str.length;i++){
@@ -160,7 +283,7 @@
     return arr;
   }
 
-  // 12マス = 4色×各3個
+  // 12 cells = 4 colors × 3 each
   function generate(seedStr){
     const each = 3;
     const bag = [];
@@ -182,6 +305,7 @@
     });
   }
 
+  // ---------- sizing ----------
   function parseSize(v){
     const [wmm,hmm] = v.split("x").map(Number);
     return { wmm, hmm };
@@ -195,26 +319,35 @@
     return { wmm, hmm };
   }
 
-  // 用紙に収まるようスケール（190×150でも必ず全表示）
+  // fit grid (ensures full visible in 190x150)
   function fitGridToPaper(wmm, hmm){
-    // 4×3 の本来サイズ（34/16）
+    // true size for 4×3 with 34/16
     const gridW = 4*34 + 3*16; // 184
     const gridH = 3*34 + 2*16; // 134
-
     const s = Math.min(wmm / gridW, hmm / gridH, 1);
-
     const grid = document.getElementById("grid");
     grid.style.transform = `translate(-50%,-50%) scale(${s})`;
+    return s;
   }
 
-  // URL sync: ?seed=R1&size=184x134
+  function setScaleVisible(on){
+    const sw = document.getElementById("scaleWrap");
+    sw.classList.toggle("on", !!on);
+  }
+
+  // ---------- URL sync ----------
+  // ?seed=R1&size=184x134&lang=ja&scale=1
   function syncToUrl(){
     const seed = document.getElementById("seed").value.trim();
     const size = document.getElementById("size").value;
+    const lang = document.getElementById("lang").value;
+    const scaleOn = document.getElementById("scale").checked;
+
     const url = new URL(location.href);
-    if(seed) url.searchParams.set("seed", seed);
-    else url.searchParams.delete("seed");
+    if(seed) url.searchParams.set("seed", seed); else url.searchParams.delete("seed");
     url.searchParams.set("size", size);
+    url.searchParams.set("lang", lang);
+    if(scaleOn) url.searchParams.set("scale","1"); else url.searchParams.delete("scale");
     history.replaceState(null, "", url.toString());
   }
 
@@ -222,70 +355,166 @@
     const url = new URL(location.href);
     const size = url.searchParams.get("size");
     const seed = url.searchParams.get("seed");
+    const lang = url.searchParams.get("lang");
+    const scale = url.searchParams.get("scale");
 
-    if(size === "190x150" || size === "184x134" || size === "183x134"){
-      document.getElementById("size").value = size;
+    if(lang === "ja" || lang === "en") document.getElementById("lang").value = lang;
+    if(size === "190x150" || size === "184x134" || size === "183x134") document.getElementById("size").value = size;
+    if(seed) document.getElementById("seed").value = seed;
+    document.getElementById("scale").checked = (scale === "1");
+  }
+
+  function setStatus(wmm,hmm,seed){
+    const lang = document.getElementById("lang").value;
+    const t = I18N[lang] || I18N.ja;
+    const scaleOn = document.getElementById("scale").checked;
+    document.getElementById("status").textContent = t.status(wmm,hmm,seed,scaleOn);
+  }
+
+  // ---------- SVG builder (source of truth for SVG/PDF/PNG) ----------
+  function currentLayoutAsColors(){
+    const grid = document.getElementById("grid");
+    return Array.from(grid.children).map(el => el.style.backgroundColor || "#ffffff");
+  }
+
+  function buildSvgString(wmm, hmm, includeScale){
+    // true grid base size in mm (without scaling): 184×134
+    const baseW = 184;
+    const baseH = 134;
+
+    // center offsets (in mm) on the chosen paper size
+    const ox = (wmm - baseW) / 2;
+    const oy = (hmm - baseH) / 2;
+
+    const colors = currentLayoutAsColors();
+
+    // top marker
+    const topText = `<text x="6" y="12" font-size="4" font-weight="bold" font-family="sans-serif">↑ TOP</text>`;
+
+    // cells (4 cols x 3 rows)
+    const cells = colors.map((fill, i) => {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const x = ox + col*(34+16);
+      const y = oy + row*(34+16);
+      return `<rect x="${x}" y="${y}" width="34" height="34" fill="${fill}" stroke="black" stroke-width="1"/>`;
+    }).join("");
+
+    // scale bar (10cm) optional, placed near bottom-left
+    let scale = "";
+    if(includeScale){
+      const sx = 6;                // 6mm from left
+      const sy = hmm - 6 - 8;      // leave room above border; bar height ~4mm + text
+      scale = `
+        <rect x="${sx-2}" y="${sy-6}" width="120" height="14" fill="white" stroke="black" stroke-width="0.6" rx="2" ry="2"/>
+        <g>
+          <rect x="${sx}" y="${sy}" width="100" height="4" fill="white" stroke="black" stroke-width="0.6"/>
+          ${Array.from({length:10}).map((_,k)=>{
+            const bx = sx + k*10;
+            const fill = (k%2===0) ? "#000" : "#fff";
+            return `<rect x="${bx}" y="${sy}" width="10" height="4" fill="${fill}" stroke="none"/>`;
+          }).join("")}
+          <text x="${sx+104}" y="${sy+3.4}" font-size="4" font-weight="bold" font-family="sans-serif">10 cm</text>
+        </g>
+      `;
     }
-    if(seed){
-      document.getElementById("seed").value = seed;
-    }
+
+    return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${wmm}mm" height="${hmm}mm" viewBox="0 0 ${wmm} ${hmm}">
+  <rect x="0" y="0" width="${wmm}" height="${hmm}" fill="white" stroke="black" stroke-width="2"/>
+  ${topText}
+  ${cells}
+  ${scale}
+</svg>`.trim();
   }
 
-  function setStatus(text){
-    document.getElementById("status").textContent = text;
-  }
-
-  function doGen(){
-    const seed = document.getElementById("seed").value.trim();
-    const { wmm, hmm } = applyPaperSize();
-    fitGridToPaper(wmm, hmm);
-    render(generate(seed));
-    syncToUrl();
-    setStatus(`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4`);
-  }
-
-  // Download PNG: SVG foreignObject方式（外部ライブラリ不要）
-  async function savePng(){
-    const { wmm, hmm } = applyPaperSize();
-    fitGridToPaper(wmm, hmm);
-
-    const paper = document.getElementById("paper");
-
-    // 96dpi換算
-    const pxW = Math.round(wmm * 96 / 25.4);
-    const pxH = Math.round(hmm * 96 / 25.4);
-
-    const html = new XMLSerializer().serializeToString(paper);
-    const svg =
-`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}">
-  <foreignObject width="100%" height="100%">
-    <div xmlns="http://www.w3.org/1999/xhtml">${html}</div>
-  </foreignObject>
-</svg>`;
-
-    const blob = new Blob([svg], {type:"image/svg+xml;charset=utf-8"});
+  // ---------- downloads ----------
+  function downloadBlob(blob, filename){
     const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function saveSvg(){
+    const { wmm, hmm } = applyPaperSize();
+    fitGridToPaper(wmm, hmm); // view fit (not affecting SVG math)
+    const includeScale = document.getElementById("scale").checked;
+
+    const svgText = buildSvgString(wmm, hmm, includeScale);
+    const seed = (document.getElementById("seed").value.trim() || "random").replace(/[^\w\-]+/g,"_");
+    const size = document.getElementById("size").value;
+    const lang = document.getElementById("lang").value;
+    downloadBlob(new Blob([svgText], {type:"image/svg+xml"}), `mosaic_2026_senior_${seed}_${size}_${lang}.svg`);
+  }
+
+  function savePdf(){
+    const { wmm, hmm } = applyPaperSize();
+    fitGridToPaper(wmm, hmm);
+    const includeScale = document.getElementById("scale").checked;
+
+    const svgText = buildSvgString(wmm, hmm, includeScale);
+    const svg64 = btoa(unescape(encodeURIComponent(svgText)));
+    const imgSrc = "data:image/svg+xml;base64," + svg64;
+
+    const ptW = wmm * 72 / 25.4; // pt
+    const ptH = hmm * 72 / 25.4;
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: "pt", format: [ptW, ptH] });
+
+    // jsPDF addImage with SVG data URL
+    pdf.addImage(imgSrc, "SVG", 0, 0, ptW, ptH);
+
+    const seed = (document.getElementById("seed").value.trim() || "random").replace(/[^\w\-]+/g,"_");
+    const size = document.getElementById("size").value;
+    const lang = document.getElementById("lang").value;
+    pdf.save(`mosaic_2026_senior_${seed}_${size}_${lang}.pdf`);
+  }
+
+  // PNG (beta): render SVG into canvas
+  function savePngBeta(){
+    const { wmm, hmm } = applyPaperSize();
+    fitGridToPaper(wmm, hmm);
+    const includeScale = document.getElementById("scale").checked;
+
+    const svgText = buildSvgString(wmm, hmm, includeScale);
+    const svgBlob = new Blob([svgText], {type:"image/svg+xml"});
+    const url = URL.createObjectURL(svgBlob);
 
     const img = new Image();
     img.onload = () => {
+      const dpi = 300; // nice print, but beta
+      const pxW = Math.round(wmm * dpi / 25.4);
+      const pxH = Math.round(hmm * dpi / 25.4);
+
       const cv = document.createElement("canvas");
-      cv.width = pxW; cv.height = pxH;
+      cv.width = pxW;
+      cv.height = pxH;
       const ctx = cv.getContext("2d");
+
       ctx.fillStyle = "#fff";
       ctx.fillRect(0,0,pxW,pxH);
-      ctx.drawImage(img,0,0);
+      ctx.drawImage(img, 0, 0, pxW, pxH);
+
       URL.revokeObjectURL(url);
 
-      const a = document.createElement("a");
       const seed = (document.getElementById("seed").value.trim() || "random").replace(/[^\w\-]+/g,"_");
       const size = document.getElementById("size").value;
-      a.download = `mosaic_2026_senior_${seed}_${size}mm_3x4.png`;
+      const lang = document.getElementById("lang").value;
+
+      const a = document.createElement("a");
+      a.download = `mosaic_2026_senior_${seed}_${size}_${lang}.png`;
       a.href = cv.toDataURL("image/png");
       a.click();
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      alert("PNG生成に失敗しました。Chrome/Edgeで試してください。");
+      alert("PNG生成に失敗しました（beta）。SVG / PDF を使ってください。");
     };
     img.src = url;
   }
@@ -294,21 +523,53 @@
     try{
       syncToUrl();
       await navigator.clipboard.writeText(location.href);
-      alert("リンクをコピーしました");
+      alert("リンクをコピーしました / Link copied");
     }catch{
       alert("コピーできませんでした（ブラウザ権限を確認）");
     }
   }
 
+  // ---------- main ----------
+  function doGen(){
+    const seed = document.getElementById("seed").value.trim();
+    const { wmm, hmm } = applyPaperSize();
+
+    // render pattern
+    render(generate(seed));
+
+    // view fit + scale toggle
+    fitGridToPaper(wmm, hmm);
+    setScaleVisible(document.getElementById("scale").checked);
+
+    syncToUrl();
+    setStatus(wmm,hmm,seed);
+  }
+
+  function onScaleToggle(){
+    const { wmm, hmm } = applyPaperSize();
+    setScaleVisible(document.getElementById("scale").checked);
+    syncToUrl();
+    setStatus(wmm,hmm,document.getElementById("seed").value.trim());
+  }
+
   // wiring
   document.getElementById("gen").addEventListener("click", doGen);
-  document.getElementById("cap").addEventListener("click", savePng);
+  document.getElementById("dl-svg").addEventListener("click", saveSvg);
+  document.getElementById("dl-pdf").addEventListener("click", savePdf);
+  document.getElementById("dl-png").addEventListener("click", savePngBeta);
   document.getElementById("print").addEventListener("click", () => window.print());
   document.getElementById("copylink").addEventListener("click", copyLink);
   document.getElementById("size").addEventListener("change", doGen);
+  document.getElementById("lang").addEventListener("change", () => {
+    applyLang(document.getElementById("lang").value);
+    syncToUrl();
+  });
+  document.getElementById("scale").addEventListener("change", onScaleToggle);
 
-  // init
+  // init from URL
   loadFromUrl();
+  applyLang(document.getElementById("lang").value);
+  setScaleVisible(document.getElementById("scale").checked);
   doGen();
 </script>
 </body>
