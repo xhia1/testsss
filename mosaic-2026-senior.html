@@ -33,7 +33,6 @@
 
     .bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     .tiny{ font-size:12px; color:#444; font-weight:700; }
-    .spacer{ width: 8px; }
 
     label.switch{
       display:flex;
@@ -48,7 +47,7 @@
     .paper{
       background:#fff;
       box-sizing:border-box;
-      border: 2px solid #000; /* 黒枠 */
+      border: 2px solid #000; /* 外枠だけ残す */
       position: relative;
       margin-top: 14px;
       overflow: hidden;
@@ -72,10 +71,11 @@
       row-gap: var(--gap);
       transform-origin: center;
     }
+
+    /* 色マス：枠線なし（重要） */
     .cell{
       width: var(--cell);
       height: var(--cell);
-      border: 1px solid #000;
       box-sizing:border-box;
     }
 
@@ -88,7 +88,7 @@
       border: 1px solid #000;
       border-radius: 10px;
       padding: 3mm 4mm;
-      display:none; /* toggleで表示 */
+      display:none;
       gap: 3mm;
       align-items:center;
     }
@@ -176,7 +176,7 @@
 
   <div class="note" id="note">
     ・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）と 16mm（間隔）を確認。<br>
-    ・12マスは 4色×各3個で均等。Seedを入れると同じ配置を再現できます（URL共有可）。<br>
+    ・12マスは各色0〜6個（合計12）。Seedを入れると同じ配置を再現できます（URL共有可）。<br>
     ・Download PNG は環境差があるため beta です。印刷は SVG / PDF 推奨。
   </div>
 </div>
@@ -193,15 +193,14 @@
       pdf: "Download PDF（推奨）",
       print: "Print",
       copy: "Copy Link",
-      back: "Back",
       scaleLabel: "10cmスケール",
       scaleText: "10 cm",
       note: [
         "・印刷は「拡大縮小なし（100%）」推奨。まず定規で 34mm（色マス）と 16mm（間隔）を確認。",
-        "・12マスは 4色×各3個で均等。Seedを入れると同じ配置を再現できます（URL共有可）。",
+        "・12マスは各色0〜6個（合計12）。Seedを入れると同じ配置を再現できます（URL共有可）。",
         "・Download PNG は環境差があるため beta です。印刷は SVG / PDF 推奨。"
       ],
-      status: (wmm,hmm,seed,scaleOn)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"}`
+      status: (wmm,hmm,seed,scaleOn,counts)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"} / Y,B,G,W: ${counts.join(",")}`
     },
     en: {
       title: "RoboMission 2026 Senior — Mosaic Paper Randomizer (3×4)",
@@ -212,15 +211,14 @@
       pdf: "Download PDF (Recommended)",
       print: "Print",
       copy: "Copy Link",
-      back: "Back",
       scaleLabel: "10cm scale",
       scaleText: "10 cm",
       note: [
         "• Print at 100% (no scaling). Check 34mm (cell) and 16mm (gap) with a ruler first.",
-        "• 12 cells are balanced: 4 colors × 3 each. Seed reproduces the same pattern (shareable URL).",
+        "• 12 cells; each color can be 0..6 (total 12). Seed reproduces the same pattern (shareable URL).",
         "• PNG download is beta (environment-dependent). For printing, SVG/PDF is recommended."
       ],
-      status: (wmm,hmm,seed,scaleOn)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"}`
+      status: (wmm,hmm,seed,scaleOn,counts)=>`size: ${wmm}×${hmm}mm / seed: ${seed || "random"} / grid: 3×4 / scale: ${scaleOn ? "ON":"OFF"} / Y,B,G,W: ${counts.join(",")}`
     }
   };
 
@@ -283,14 +281,35 @@
     return arr;
   }
 
-  // 12 cells = 4 colors × 3 each
+  // ✅ 12マス固定 / 各色 0..6 / 合計12（6,6,0,0 もOK）
+  // 4色×各6個の在庫（合計24）から12個を無作為に引くイメージ
   function generate(seedStr){
-    const each = 3;
-    const bag = [];
-    for(const c of COLORS){
-      for(let i=0;i<each;i++) bag.push(c);
+    const rng = makeRng(seedStr);
+
+    const counts = [0,0,0,0];
+    let rem = 12;
+
+    while(rem > 0){
+      // 在庫上限6を超えない色だけ候補にする
+      const candidates = [];
+      for(let i=0;i<4;i++){
+        if(counts[i] < 6) candidates.push(i);
+      }
+      // 4*6=24 >= 12 なので必ず候補がある
+      const idx = candidates[Math.floor(rng() * candidates.length)];
+      counts[idx] += 1;
+      rem -= 1;
     }
-    shuffle(bag, makeRng(seedStr));
+
+    // bagを作ってシャッフル
+    const bag = [];
+    for(let i=0;i<4;i++){
+      for(let k=0;k<counts[i];k++) bag.push(COLORS[i]);
+    }
+    shuffle(bag, rng);
+
+    // status表示用に付与
+    bag._counts = counts; // [Y,B,G,W]
     return bag;
   }
 
@@ -364,11 +383,11 @@
     document.getElementById("scale").checked = (scale === "1");
   }
 
-  function setStatus(wmm,hmm,seed){
+  function setStatus(wmm,hmm,seed,counts){
     const lang = document.getElementById("lang").value;
     const t = I18N[lang] || I18N.ja;
     const scaleOn = document.getElementById("scale").checked;
-    document.getElementById("status").textContent = t.status(wmm,hmm,seed,scaleOn);
+    document.getElementById("status").textContent = t.status(wmm,hmm,seed,scaleOn,counts);
   }
 
   // ---------- SVG builder (source of truth for SVG/PDF/PNG) ----------
@@ -388,23 +407,22 @@
 
     const colors = currentLayoutAsColors();
 
-    // top marker
     const topText = `<text x="6" y="12" font-size="4" font-weight="bold" font-family="sans-serif">↑ TOP</text>`;
 
-    // cells (4 cols x 3 rows)
+    // cells: 枠線なし（fillのみ）
     const cells = colors.map((fill, i) => {
       const col = i % 4;
       const row = Math.floor(i / 4);
       const x = ox + col*(34+16);
       const y = oy + row*(34+16);
-      return `<rect x="${x}" y="${y}" width="34" height="34" fill="${fill}" stroke="black" stroke-width="1"/>`;
+      return `<rect x="${x}" y="${y}" width="34" height="34" fill="${fill}"/>`;
     }).join("");
 
-    // scale bar (10cm) optional, placed near bottom-left
+    // scale bar (10cm) optional
     let scale = "";
     if(includeScale){
-      const sx = 6;                // 6mm from left
-      const sy = hmm - 6 - 8;      // leave room above border; bar height ~4mm + text
+      const sx = 6;
+      const sy = hmm - 6 - 8;
       scale = `
         <rect x="${sx-2}" y="${sy-6}" width="120" height="14" fill="white" stroke="black" stroke-width="0.6" rx="2" ry="2"/>
         <g>
@@ -442,7 +460,7 @@
 
   function saveSvg(){
     const { wmm, hmm } = applyPaperSize();
-    fitGridToPaper(wmm, hmm); // view fit (not affecting SVG math)
+    fitGridToPaper(wmm, hmm);
     const includeScale = document.getElementById("scale").checked;
 
     const svgText = buildSvgString(wmm, hmm, includeScale);
@@ -461,13 +479,12 @@
     const svg64 = btoa(unescape(encodeURIComponent(svgText)));
     const imgSrc = "data:image/svg+xml;base64," + svg64;
 
-    const ptW = wmm * 72 / 25.4; // pt
+    const ptW = wmm * 72 / 25.4;
     const ptH = hmm * 72 / 25.4;
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: "pt", format: [ptW, ptH] });
 
-    // jsPDF addImage with SVG data URL
     pdf.addImage(imgSrc, "SVG", 0, 0, ptW, ptH);
 
     const seed = (document.getElementById("seed").value.trim() || "random").replace(/[^\w\-]+/g,"_");
@@ -488,7 +505,7 @@
 
     const img = new Image();
     img.onload = () => {
-      const dpi = 300; // nice print, but beta
+      const dpi = 300;
       const pxW = Math.round(wmm * dpi / 25.4);
       const pxH = Math.round(hmm * dpi / 25.4);
 
@@ -534,23 +551,24 @@
     const seed = document.getElementById("seed").value.trim();
     const { wmm, hmm } = applyPaperSize();
 
-    // render pattern
-    render(generate(seed));
+    const bag = generate(seed);
+    render(bag);
 
-    // view fit + scale toggle
     fitGridToPaper(wmm, hmm);
     setScaleVisible(document.getElementById("scale").checked);
 
     syncToUrl();
-    setStatus(wmm,hmm,seed);
+    setStatus(wmm,hmm,seed,bag._counts || [0,0,0,0]);
   }
 
   function onScaleToggle(){
     const { wmm, hmm } = applyPaperSize();
     setScaleVisible(document.getElementById("scale").checked);
     syncToUrl();
-    setStatus(wmm,hmm,document.getElementById("seed").value.trim());
+    setStatus(wmm,hmm,document.getElementById("seed").value.trim(), lastCounts);
   }
+
+  let lastCounts = [0,0,0,0];
 
   // wiring
   document.getElementById("gen").addEventListener("click", doGen);
@@ -564,13 +582,30 @@
     applyLang(document.getElementById("lang").value);
     syncToUrl();
   });
-  document.getElementById("scale").addEventListener("change", onScaleToggle);
+  document.getElementById("scale").addEventListener("change", () => {
+    const { wmm, hmm } = applyPaperSize();
+    setScaleVisible(document.getElementById("scale").checked);
+    syncToUrl();
+    const seed = document.getElementById("seed").value.trim();
+    setStatus(wmm,hmm,seed,lastCounts);
+  });
 
   // init from URL
   loadFromUrl();
   applyLang(document.getElementById("lang").value);
   setScaleVisible(document.getElementById("scale").checked);
-  doGen();
+
+  // initial generate
+  (function init(){
+    const seed = document.getElementById("seed").value.trim();
+    const { wmm, hmm } = applyPaperSize();
+    const bag = generate(seed);
+    lastCounts = bag._counts || [0,0,0,0];
+    render(bag);
+    fitGridToPaper(wmm, hmm);
+    syncToUrl();
+    setStatus(wmm,hmm,seed,lastCounts);
+  })();
 </script>
 </body>
 </html>
