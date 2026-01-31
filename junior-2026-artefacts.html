@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WRO 2026 Junior — Artefacts Randomizer</title>
+  <style>
+    :root{
+      --font: system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
+    }
+    body{ margin:0; font-family:var(--font); background:#fafafa; color:#111; }
+    header{ background:#fff; border-bottom:1px solid #e5e5e5; }
+    .wrap{ max-width:1160px; margin:0 auto; padding:16px; }
+    header .wrap{ display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; }
+    h1{ margin:0; font-size:16px; }
+
+    .btn, select, input, label.switch{
+      padding:10px 12px; border-radius:12px; border:1px solid #ccc;
+      background:#fff; font-weight:900;
+    }
+    .btn{ cursor:pointer; }
+    .btn:hover{ background:#f2f2f2; }
+    input{ font-weight:800; }
+    .bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .tiny{ font-size:12px; color:#444; font-weight:700; }
+
+    label.switch{
+      display:flex; gap:8px; align-items:center; cursor:pointer; user-select:none;
+    }
+    label.switch input{ width:auto; padding:0; border:none; }
+
+    /* Stage */
+    .stage{
+      position: relative;
+      margin-top: 14px;
+      background:#fff;
+      border: 2px solid #000;
+      border-radius: 14px;
+      overflow:hidden;
+    }
+    .stageInner{
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3; /* 背景画像に合わせて必要なら後で調整可 */
+      background:#eee;
+    }
+    .bg{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit: contain;
+      background:#fff;
+    }
+
+    /* Overlay squares */
+    .marker{
+      position:absolute;
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+      display:flex; align-items:center; justify-content:center;
+      font-weight: 1000;
+      color:#111;
+      user-select:none;
+      touch-action:none;
+    }
+    .marker[data-edit="1"]{
+      outline: 3px dashed rgba(0,0,0,.35);
+      cursor: grab;
+    }
+    .marker .lbl{
+      background: rgba(255,255,255,.75);
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 1000;
+    }
+
+    .panel{
+      margin-top:10px;
+      background:#fff;
+      border:1px solid #ddd;
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.04);
+    }
+    .note{ font-size:12px; color:#333; line-height:1.6; margin:0; }
+    .legend{
+      display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;
+      align-items:center;
+    }
+    .chip{
+      display:flex; gap:6px; align-items:center;
+      padding:6px 10px; border:1px solid #ddd; border-radius:999px;
+      font-weight:900; font-size:12px; background:#fff;
+    }
+    .dot{ width:14px; height:14px; border-radius:4px; border:1px solid rgba(0,0,0,.15); }
+
+    @media (max-width:520px){
+      .marker{ width:40px; height:40px; }
+      .marker .lbl{ font-size:11px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1 id="title">RoboMission 2026 Junior — Artefacts Randomizer</h1>
+    <div class="bar">
+      <select id="lang" aria-label="language">
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+      </select>
+
+      <input id="seed" type="text" placeholder="Seed (例: R1)" aria-label="seed" />
+
+      <button class="btn" id="gen">New arrangement</button>
+      <button class="btn" id="copylink">Copy Link</button>
+      <button class="btn" id="toggleEdit">Edit Positions</button>
+      <button class="btn" onclick="location.href='./index.html'">Back</button>
+
+      <span class="tiny" id="status"></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <div class="stageInner" id="stage">
+      <!-- 背景画像（repoに assets/junior-mat.png を置く） -->
+      <img class="bg" id="bg" src="./assets/junior-mat.png" alt="WRO 2026 Junior game mat" />
+
+      <!-- 4つの配置マーカー（= 黒い4マス） -->
+      <div class="marker" id="m0"><span class="lbl">A</span></div>
+      <div class="marker" id="m1"><span class="lbl">B</span></div>
+      <div class="marker" id="m2"><span class="lbl">C</span></div>
+      <div class="marker" id="m3"><span class="lbl">D</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="note" id="note">
+      5色（青/赤/緑/黒/黄）のアーティファクトから各ラウンド4色を使用し、4つの黒マスへランダム配置。未使用の色も表示します。
+    </p>
+    <div class="legend" id="legend"></div>
+    <div class="legend" id="unused"></div>
+  </div>
+</div>
+
+<script>
+  // ---- i18n ----
+  const I18N = {
+    ja: {
+      title: "RoboMission 2026 Junior — Artefacts Randomizer",
+      seedPh: "Seed (例: R1)",
+      gen: "新しい配置",
+      copy: "Copy Link",
+      editOn: "位置編集: ON",
+      editOff: "Edit Positions",
+      note:
+        "5色（青/赤/緑/黒/黄）のアーティファクトから各ラウンド4色を使用し、4つの黒マスへランダム配置。未使用の色も表示します。",
+      status: (seed, unusedKey)=>`seed: ${seed || "random"} / unused: ${unusedKey}`,
+      used: "使用（4つ）",
+      unused: "未使用（1つ）"
+    },
+    en: {
+      title: "RoboMission 2026 Junior — Artefacts Randomizer",
+      seedPh: "Seed (e.g., R1)",
+      gen: "New arrangement",
+      copy: "Copy Link",
+      editOn: "Edit Positions: ON",
+      editOff: "Edit Positions",
+      note:
+        "Each round uses 4 colours out of 5 artefacts (blue/red/green/black/yellow) and assigns them to the four black squares. One colour is unused.",
+      status: (seed, unusedKey)=>`seed: ${seed || "random"} / unused: ${unusedKey}`,
+      used: "Used (4)",
+      unused: "Unused (1)"
+    }
+  };
+
+  function applyLang(lang){
+    const t = I18N[lang] || I18N.ja;
+    document.documentElement.lang = lang;
+    document.getElementById("title").textContent = t.title;
+    document.getElementById("seed").placeholder = t.seedPh;
+    document.getElementById("gen").textContent = t.gen;
+    document.getElementById("copylink").textContent = t.copy;
+    document.getElementById("note").textContent = t.note;
+    // toggleEdit label is set dynamically
+  }
+
+  // ---- seeded RNG ----
+  function xfnv1a(str){
+    let h = 2166136261 >>> 0;
+    for (let i=0;i<str.length;i++){
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return () => {
+      h += h<<13; h ^= h>>>7;
+      h += h<<3;  h ^= h>>>17;
+      h += h<<5;
+      return h>>>0;
+    };
+  }
+  function mulberry32(a){
+    return function(){
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ (t>>>15), t | 1);
+      t ^= t + Math.imul(t ^ (t>>>7), t | 61);
+      return ((t ^ (t>>>14))>>>0) / 4294967296;
+    }
+  }
+  function makeRng(seedStr){
+    if(!seedStr) return Math.random;
+    const seed = xfnv1a(seedStr)();
+    return mulberry32(seed);
+  }
+  function shuffle(arr, rng){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(rng()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  // ---- rule colours: 5 artefacts, 4 used per round ----
+  const ARTEFACTS = [
+    { key:"BLUE",   hex:"#2f6bff" },
+    { key:"RED",    hex:"#e43b3b" },
+    { key:"GREEN",  hex:"#21b35b" },
+    { key:"BLACK",  hex:"#222222" },
+    { key:"YELLOW", hex:"#ffd400" }
+  ];
+
+  // pick 4 of 5, assign to 4 spots (A-D)
+  function generate(seedStr){
+    const rng = makeRng(seedStr);
+
+    const pool = ARTEFACTS.slice();
+    shuffle(pool, rng);
+
+    const used = pool.slice(0,4);
+    const unused = pool[4];
+
+    shuffle(used, rng); // assignment random
+    return { used, unused };
+  }
+
+  // ---- marker positions (percent-based, editable) ----
+  // 初期値（だいたい）：下中央の4マス付近。必要なら Edit Positions でドラッグ調整してOK。
+  // 値は stage（表示領域）に対する %。
+  const DEFAULT_POS = [
+    { x: 44.0, y: 85.0 }, // A
+    { x: 51.0, y: 85.0 }, // B
+    { x: 58.0, y: 85.0 }, // C
+    { x: 65.0, y: 85.0 }  // D
+  ];
+
+  function loadPos(){
+    const url = new URL(location.href);
+    const p = url.searchParams.get("pos");
+    if(!p) return null;
+    try{
+      const arr = JSON.parse(decodeURIComponent(p));
+      if(Array.isArray(arr) && arr.length===4) return arr;
+    }catch{}
+    return null;
+  }
+
+  function savePosToUrl(pos){
+    const url = new URL(location.href);
+    url.searchParams.set("pos", encodeURIComponent(JSON.stringify(pos)));
+    history.replaceState(null, "", url.toString());
+  }
+
+  // Keep seed/lang in URL too
+  function syncBasicsToUrl(){
+    const url = new URL(location.href);
+    const seed = document.getElementById("seed").value.trim();
+    const lang = document.getElementById("lang").value;
+    if(seed) url.searchParams.set("seed", seed); else url.searchParams.delete("seed");
+    url.searchParams.set("lang", lang);
+    history.replaceState(null, "", url.toString());
+  }
+
+  function applyFromUrl(){
+    const url = new URL(location.href);
+    const seed = url.searchParams.get("seed");
+    const lang = url.searchParams.get("lang");
+    if(seed) document.getElementById("seed").value = seed;
+    if(lang==="ja"||lang==="en") document.getElementById("lang").value = lang;
+  }
+
+  let positions = loadPos() || DEFAULT_POS.map(p=>({x:p.x,y:p.y}));
+  let editMode = false;
+
+  function placeMarkers(){
+    for(let i=0;i<4;i++){
+      const el = document.getElementById("m"+i);
+      el.style.left = positions[i].x + "%";
+      el.style.top  = positions[i].y + "%";
+      el.style.transform = "translate(-50%, -50%)";
+      el.dataset.edit = editMode ? "1" : "0";
+    }
+  }
+
+  // ---- render overlay ----
+  function setStatus(seed, unusedKey){
+    const lang = document.getElementById("lang").value;
+    const t = I18N[lang] || I18N.ja;
+    document.getElementById("status").textContent = t.status(seed, unusedKey);
+  }
+
+  function renderLegend(used, unused){
+    const lang = document.getElementById("lang").value;
+    const t = I18N[lang] || I18N.ja;
+
+    const legend = document.getElementById("legend");
+    const un = document.getElementById("unused");
+    legend.innerHTML = "";
+    un.innerHTML = "";
+
+    // Used list
+    const head = document.createElement("div");
+    head.className = "chip";
+    head.textContent = t.used;
+    legend.appendChild(head);
+
+    used.forEach((c, idx)=>{
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.innerHTML = `<span class="dot" style="background:${c.hex}"></span> ${["A","B","C","D"][idx]}: ${c.key}`;
+      legend.appendChild(chip);
+    });
+
+    // Unused
+    const head2 = document.createElement("div");
+    head2.className = "chip";
+    head2.textContent = t.unused;
+    un.appendChild(head2);
+
+    const chip2 = document.createElement("div");
+    chip2.className = "chip";
+    chip2.innerHTML = `<span class="dot" style="background:${unused.hex}"></span> ${unused.key}`;
+    un.appendChild(chip2);
+  }
+
+  function applyColours(used){
+    // A-D in order
+    for(let i=0;i<4;i++){
+      const el = document.getElementById("m"+i);
+      el.style.background = used[i].hex;
+      // black tile: make label white
+      el.style.color = (used[i].key==="BLACK") ? "#fff" : "#111";
+    }
+  }
+
+  function doGen(){
+    const seed = document.getElementById("seed").value.trim();
+    const { used, unused } = generate(seed);
+    applyColours(used);
+    renderLegend(used, unused);
+    syncBasicsToUrl();
+    setStatus(seed, unused.key);
+  }
+
+  // ---- drag edit ----
+  function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
+
+  function enableDrag(el, idx){
+    let dragging = false;
+
+    function pointerDown(e){
+      if(!editMode) return;
+      dragging = true;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = "grabbing";
+    }
+    function pointerMove(e){
+      if(!dragging || !editMode) return;
+      const stage = document.getElementById("stage");
+      const r = stage.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width) * 100;
+      const y = ((e.clientY - r.top) / r.height) * 100;
+      positions[idx].x = clamp(x, 0, 100);
+      positions[idx].y = clamp(y, 0, 100);
+      placeMarkers();
+      savePosToUrl(positions);
+    }
+    function pointerUp(){
+      if(!dragging) return;
+      dragging = false;
+      el.style.cursor = "grab";
+    }
+
+    el.addEventListener("pointerdown", pointerDown);
+    window.addEventListener("pointermove", pointerMove);
+    window.addEventListener("pointerup", pointerUp);
+  }
+
+  async function copyLink(){
+    try{
+      syncBasicsToUrl();
+      await navigator.clipboard.writeText(location.href);
+      alert("リンクをコピーしました / Link copied");
+    }catch{
+      alert("コピーできませんでした（ブラウザ権限を確認）");
+    }
+  }
+
+  function toggleEdit(){
+    editMode = !editMode;
+    const lang = document.getElementById("lang").value;
+    const t = I18N[lang] || I18N.ja;
+    document.getElementById("toggleEdit").textContent = editMode ? t.editOn : t.editOff;
+    placeMarkers();
+  }
+
+  // ---- init ----
+  applyFromUrl();
+  applyLang(document.getElementById("lang").value);
+  placeMarkers();
+
+  // enable drag for all markers
+  for(let i=0;i<4;i++){
+    enableDrag(document.getElementById("m"+i), i);
+  }
+
+  // wiring
+  document.getElementById("gen").addEventListener("click", doGen);
+  document.getElementById("copylink").addEventListener("click", copyLink);
+  document.getElementById("toggleEdit").addEventListener("click", toggleEdit);
+
+  document.getElementById("lang").addEventListener("change", ()=>{
+    applyLang(document.getElementById("lang").value);
+    // keep edit button label consistent
+    const lang = document.getElementById("lang").value;
+    const t = I18N[lang] || I18N.ja;
+    document.getElementById("toggleEdit").textContent = editMode ? t.editOn : t.editOff;
+    syncBasicsToUrl();
+  });
+
+  // first draw
+  doGen();
+  // set initial edit label
+  document.getElementById("toggleEdit").textContent = I18N[document.getElementById("lang").value].editOff;
+</script>
+</body>
+</html>
