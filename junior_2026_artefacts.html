@@ -27,7 +27,6 @@
     label.switch{ display:flex; gap:8px; align-items:center; cursor:pointer; user-select:none; }
     label.switch input{ width:auto; padding:0; border:none; }
 
-    /* Stage */
     .stage{
       position: relative;
       margin-top: 14px;
@@ -37,23 +36,22 @@
       overflow:hidden;
     }
 
-    /* ★重要：背景画像（2048×1000）に合わせた縦横比 */
+    /* 背景画像 2048×1000 に合わせる */
     .stageInner{
       position: relative;
       width: 100%;
-      aspect-ratio: 2048 / 1000; /* ← ここが修正点 */
+      aspect-ratio: 2048 / 1000;
       background:#fff;
     }
 
     .bg{
       position:absolute; inset:0;
       width:100%; height:100%;
-      object-fit: contain; /* 見切れない（推奨） */
+      object-fit: contain;
       background:#fff;
       display:block;
     }
 
-    /* Overlay squares */
     .marker{
       position:absolute;
       width: 44px; height: 44px;
@@ -71,7 +69,7 @@
     }
     .marker .lbl{
       background: rgba(255,255,255,.78);
-      padding: 2px 6px;
+      padding: 2px 7px;
       border-radius: 999px;
       font-size: 12px;
       font-weight: 1000;
@@ -97,7 +95,6 @@
     }
     .dot{ width:14px; height:14px; border-radius:4px; border:1px solid rgba(0,0,0,.15); }
 
-    /* 背景が見づらい時に便利（任意） */
     .dim .bg{ filter: brightness(0.92) contrast(1.05); }
 
     @media (max-width:520px){
@@ -137,14 +134,14 @@
 <div class="wrap">
   <div class="stage">
     <div class="stageInner" id="stage">
-      <!-- ★画像を assets/junior_mat.jpg に -->
+      <!-- ★ファイル名：assets/2026-GameMat-Junior.jpg -->
       <img class="bg" id="bg" src="./assets/2026-GameMat-Junior.jpg" alt="WRO 2026 Junior game mat" />
 
-      <!-- 4つの配置マーカー（= 黒い4マス） -->
-      <div class="marker" id="m0"><span class="lbl">A</span></div>
-      <div class="marker" id="m1"><span class="lbl">B</span></div>
-      <div class="marker" id="m2"><span class="lbl">C</span></div>
-      <div class="marker" id="m3"><span class="lbl">D</span></div>
+      <!-- ★表記を 1,2,3,4 に -->
+      <div class="marker" id="m0"><span class="lbl">1</span></div>
+      <div class="marker" id="m1"><span class="lbl">2</span></div>
+      <div class="marker" id="m2"><span class="lbl">3</span></div>
+      <div class="marker" id="m3"><span class="lbl">4</span></div>
     </div>
   </div>
 
@@ -158,7 +155,8 @@
 </div>
 
 <script>
-  // ---- i18n ----
+  const LABELS = ["1","2","3","4"];
+
   const I18N = {
     ja: {
       title: "RoboMission 2026 Junior — Artefacts Randomizer",
@@ -201,7 +199,6 @@
     document.getElementById("dimLabel").textContent = t.dim;
   }
 
-  // ---- seeded RNG ----
   function xfnv1a(str){
     let h = 2166136261 >>> 0;
     for (let i=0;i<str.length;i++){
@@ -236,7 +233,6 @@
     return arr;
   }
 
-  // ---- rule colours: 5 artefacts, 4 used per round ----
   const ARTEFACTS = [
     { key:"BLUE",   hex:"#2f6bff" },
     { key:"RED",    hex:"#e43b3b" },
@@ -245,28 +241,25 @@
     { key:"YELLOW", hex:"#ffd400" }
   ];
 
-  // pick 4 of 5, assign to 4 spots (A-D)
   function generate(seedStr){
     const rng = makeRng(seedStr);
-
     const pool = ARTEFACTS.slice();
     shuffle(pool, rng);
 
     const used = pool.slice(0,4);
     const unused = pool[4];
 
-    shuffle(used, rng); // assignment random
+    shuffle(used, rng);
     return { used, unused };
   }
 
-  // ---- marker positions (percent-based, editable) ----
-  // 初期値：画像全体が見える（contain）前提で、下側の4マス付近に“だいたい”合わせてある
-  // ピッタリ合わせたい場合は Edit Positions でドラッグしてURL共有
+  // ★ズレ修正：少し下げて、わずかに左右も調整（初期値）
+  // まだ微妙なら、Edit Positions で合わせて Copy Link → pos= を DEFAULT_POS に固定も可能
   const DEFAULT_POS = [
-    { x: 47.0, y: 84.5 }, // A
-    { x: 53.0, y: 84.5 }, // B
-    { x: 59.0, y: 84.5 }, // C
-    { x: 65.0, y: 84.5 }  // D
+    { x: 49.4, y: 88.0 }, // 1
+    { x: 55.2, y: 88.0 }, // 2
+    { x: 61.0, y: 88.0 }, // 3
+    { x: 66.8, y: 88.0 }  // 4
   ];
 
   function loadPos(){
@@ -346,7 +339,8 @@
     used.forEach((c, idx)=>{
       const chip = document.createElement("div");
       chip.className = "chip";
-      chip.innerHTML = `<span class="dot" style="background:${c.hex}"></span> ${["A","B","C","D"][idx]}: ${c.key}`;
+      chip.innerHTML =
+        `<span class="dot" style="background:${c.hex}"></span> ${LABELS[idx]}: ${c.key}`;
       legend.appendChild(chip);
     });
 
@@ -378,7 +372,6 @@
     setStatus(seed, unused.key);
   }
 
-  // ---- drag edit ----
   function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
 
   function enableDrag(el, idx){
@@ -435,12 +428,11 @@
     syncBasicsToUrl();
   }
 
-  // ---- init ----
   applyFromUrl();
   applyLang(document.getElementById("lang").value);
 
-  // initial edit label
-  document.getElementById("toggleEdit").textContent = I18N[document.getElementById("lang").value].editOff;
+  document.getElementById("toggleEdit").textContent =
+    I18N[document.getElementById("lang").value].editOff;
 
   placeMarkers();
   applyDim();
@@ -463,12 +455,10 @@
 
   document.getElementById("dim").addEventListener("change", applyDim);
 
-  // background load error hint
   document.getElementById("bg").addEventListener("error", ()=>{
     alert("背景画像が読み込めませんでした。repoに assets/2026-GameMat-Junior.jpg があるか確認してください。");
   });
 
-  // first draw
   doGen();
 </script>
 </body>
